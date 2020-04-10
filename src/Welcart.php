@@ -1,5 +1,5 @@
 <?php
-namespace Helper;
+namespace Codeception\Module;
 
 use Codeception\Module;
 
