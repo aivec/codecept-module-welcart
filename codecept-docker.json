@@ -1,0 +1,10 @@
+{
+  "namespace": "codecept-module-welcart",
+  "projectType": "library",
+  "wordpressVersion": "5.6",
+  "language": "en_US",
+  "downloadPlugins": ["usc-e-shop"],
+  "downloadThemes": [],
+  "ssh": [],
+  "ftp": []
+}

@@ -1,4 +1,7 @@
 {
-  "phpcs.standard": "PSR2",
-  "phpcbf.standard": "PSR2"
+  "phpcs.standard": "Aivec-Core-7",
+  "phpcbf.standard": "Aivec-Core-7",
+  "phpcs.executablePath": "/home/evan/.config/composer/vendor/bin/phpcs",
+  "phpcbf.executablePath": "/home/evan/.config/composer/vendor/bin/phpcbf",
+  "phpcbf.debug": true
 }

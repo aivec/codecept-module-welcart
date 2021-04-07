@@ -1,20 +1,26 @@
 <?php
+
 namespace Codeception\Module;
 
+use WP_UnitTest_Factory;
 use Codeception\Module;
+use InvalidArgumentException;
+use Exception;
 
 class Welcart extends Module
 {
+    public const SKUS_EMPTY = 4000;
+    public const SKU_NAME_EMPTY = 4001;
+    public const SKU_PRICE_EMPTY = 4002;
 
     /**
      * **HOOK** executed before test
      *
      * @param \Codeception\TestInterface $test
      */
-    public function _before(\Codeception\TestInterface $test): void
-    {
+    public function _before(\Codeception\TestInterface $test): void {
         global $usces;
-    
+
         update_option('timezone_string', 'Asia/Tokyo');
         $usces->set_default_page();
         $usces->set_default_categories();
@@ -42,8 +48,7 @@ class Welcart extends Module
      *
      * @param \Codeception\TestInterface $test
      */
-    public function _after(\Codeception\TestInterface $test): void
-    {
+    public function _after(\Codeception\TestInterface $test): void {
         global $wpdb;
 
         $access = $wpdb->prefix . 'usces_access';
@@ -59,11 +64,19 @@ class Welcart extends Module
         $ordert = $wpdb->prefix . 'usces_order';
         $ordercartt = $wpdb->prefix . 'usces_ordercart';
 
-        $wpdb->query("SET foreign_key_checks = 0");
+        $wpdb->query('SET foreign_key_checks = 0');
         $wpdb->query("DROP TABLE IF EXISTS {$log}, {$access}");
         $wpdb->query("DROP TABLE IF EXISTS {$ordercartmetat}, {$ordermetat}, {$memmetat}, {$cmeta}");
         $wpdb->query("DROP TABLE IF EXISTS {$ordert}, {$memt}, {$cont}, {$ordercartt}");
-        $wpdb->query("SET foreign_key_checks = 1");
+        $wpdb->query('SET foreign_key_checks = 1');
+    }
+
+    protected static function factory() {
+        static $factory = null;
+        if (!$factory) {
+            $factory = new \WP_UnitTest_Factory();
+        }
+        return $factory;
     }
 
     /**
@@ -73,8 +86,7 @@ class Welcart extends Module
      * @param array $members
      * @return void
      */
-    public function createTestMembers(array $members): void
-    {
+    public function createTestMembers(array $members): void {
         global $wpdb;
 
         $index = 0;
@@ -123,8 +135,7 @@ class Welcart extends Module
      * @param array $orders
      * @return void
      */
-    public function createTestOrders(array $orders): void
-    {
+    public function createTestOrders(array $orders): void {
         global $wpdb;
 
         $order_table_name = $wpdb->prefix . 'usces_order';
@@ -176,5 +187,77 @@ class Welcart extends Module
             $index++;
             $wpdb->query($query);
         }
+    }
+
+    /**
+     * Creates a Welcart item
+     *
+     * @author Evan D Shaw <evandanielshaw@gmail.com>
+     * @param string $itemcode
+     * @param array  $itemskus multi-dimensional array of SKUs for the item. Must contain at least one SKU
+     * @param array  $itemargs extra arguments to add to `$_POST` for the `item_save_metadata()` Welcart function
+     * @return int
+     * @throws InvalidArgumentException Thrown if required arguments are missing.
+     * @throws Exception Thrown if an error is returned by a Welcart function.
+     */
+    public function createItem($itemcode, $itemskus, $itemargs = []): int {
+        global $usces, $current_user, $wpdb;
+
+        if (empty($itemskus)) {
+            throw new InvalidArgumentException('"itemskus" must contain at least one SKU', self::SKUS_EMPTY);
+        }
+        // create POST object for item
+        $post = static::factory()->post->create_and_get();
+
+        // add necessary caps to current user for POST editing
+        $current_user->add_cap('edit_post');
+        $current_user->add_cap('edit_others_posts');
+        $current_user->add_cap('edit_published_posts');
+
+        // add SKUs first
+        $index = 0;
+        foreach ($itemskus as $sku) {
+            if (empty($sku['newskuname'])) {
+                throw new InvalidArgumentException('"newskuname" is missing for SKU at index ' . $index, self::SKU_NAME_EMPTY);
+            }
+            if (empty($sku['newskuprice'])) {
+                throw new InvalidArgumentException('"newskuprice" is missing for SKU at index ' . $index, self::SKU_PRICE_EMPTY);
+            }
+            $_POST['newskuname'] = !empty($sku['newskuname']) ? $sku['newskuname'] : '';
+            $_POST['newskucprice'] = !empty($sku['newskucprice']) ? $sku['newskucprice'] : '';
+            $_POST['newskuprice'] = !empty($sku['newskuprice']) ? $sku['newskuprice'] : '';
+            $_POST['newskuzaikonum'] = !empty($sku['newskuzaikonum']) ? $sku['newskuzaikonum'] : '';
+            // set zaiko to 'In Stock' by default
+            $_POST['newskuzaikoselect'] = !empty($sku['newskuzaikoselect']) ? $sku['newskuzaikoselect'] : 0;
+            $_POST['newskudisp'] = !empty($sku['newskudisp']) ? $sku['newskudisp'] : '';
+            $_POST['newskuunit'] = !empty($sku['newskuunit']) ? $sku['newskuunit'] : '';
+            $_POST['newskugptekiyo'] = !empty($sku['newskugptekiyo']) ? $sku['newskugptekiyo'] : '';
+            $_POST['newskutaxrate'] = !empty($sku['newskutaxrate']) ? $sku['newskutaxrate'] : '';
+            $res = add_item_sku_meta($post->ID);
+            if ($res === false) {
+                throw new Exception('An error occured during SKU registration.');
+            }
+        }
+
+        $_POST['usces_nonce'] = wp_create_nonce('usc-e-shop');
+        $_POST['page'] = 'usces_itemedit';
+        $_POST['itemCode'] = $itemcode;
+        if (empty($itemargs['itemName'])) {
+            $count = $wpdb->get_var("SELECT COUNT(*) FROM {$wpdb->postmeta} WHERE meta_key = 'itemName'");
+            $itemargs['itemName'] = 'TEST_itemName_' . $count;
+        }
+        foreach ($itemargs as $argkey => $val) {
+            $_POST[$argkey] = $val;
+        }
+
+        $res = item_save_metadata($post->ID, $post);
+        if ($res === $post->ID) {
+            throw new Exception('An error occured during item registration.');
+        }
+        if ($usces->action_status === 'error') {
+            throw new Exception($usces->action_message ?? 'An error occured during item registration.');
+        }
+
+        return $post->ID;
     }
 }
