@@ -6,12 +6,14 @@ use WP_UnitTest_Factory;
 use Codeception\Module;
 use InvalidArgumentException;
 use Exception;
+use RuntimeException;
 
 class Welcart extends Module
 {
     public const SKUS_EMPTY = 4000;
     public const SKU_NAME_EMPTY = 4001;
     public const SKU_PRICE_EMPTY = 4002;
+    public const WPDB_ERROR = 5000;
 
     /**
      * **HOOK** executed before test
@@ -129,74 +131,185 @@ class Welcart extends Module
     }
 
     /**
-     * Adds an arbitrary number of Welcart test orders
+     * Creates a Welcart order by inserting directly into the database.
+     *
+     * This method does not perform any validation checks. You can add fake items and
+     * customer/member info. You don't have to supply any arguments to this method if
+     * you just want a dummy order in the database.
+     *
+     * Note that, for example, if `customer` data is set for the `$entry` paramater then
+     * any required fields that are missing will be
      *
      * @author Evan D Shaw <evandanielshaw@gmail.com>
-     * @param array $orders
+     * @see self::createOrder() If you want checks to be performed the same way Welcart would for a purchase.
+     * @global \wpdb $wpdb
+     * @global \usc_e_shop $usces
+     * @param array $entry
+     * @param array $cart
+     * @param array $member
      * @return void
+     * @throws RuntimeException Thrown if a wpdb error occurs.
      */
-    public function createTestOrders(array $orders): void {
-        global $wpdb;
+    public function createOrderDirect(array $entry = [], array $cart = [], array $member = ['ID' => 0]): void {
+        global $wpdb, $usces;
 
+        $gmtdate = get_date_from_gmt(gmdate('Y-m-d H:i:s', time()));
+        if ('continue' == $charging_type) {
+            $order_modified = substr($gmtdate, 0, 10);
+        } else {
+            $noreceipt_status_table = apply_filters('usces_filter_noreceipt_status', get_option('usces_noreceipt_status'));
+
+            $status = (in_array($set['settlement'], $noreceipt_status_table)) ? 'noreceipt' : '';
+            $order_modified = null;
+        }
+
+        $order = !empty($entry['order']) ? $entry['order'] : [];
+        $customer = !empty($entry['customer']) ? $entry['customer'] : [];
+        if (!empty($cart)) {
+            $cart = [
+                [
+                    'serial' => 'a:1:{i:37;a:1:{s:9:"code1%3A1";i:0;}}',
+                    'post_id' => 37,
+                    'sku' => 'code1%3A1',
+                    'price' => 7000,
+                    'quantity' => 1,
+                    'advance' => '',
+                ],
+            ];
+        }
+
+        $customer['mailaddress1'] = isset($customer['mailaddress1']) ? $customer['mailaddress1'] : 'test@gmail.com';
+        $customer['name1'] = isset($customer['name1']) ? $customer['name1'] : 'Mega';
+        $customer['name2'] = isset($customer['name2']) ? $customer['name2'] : 'Man';
+        $customer['name3'] = isset($customer['name3']) ? $customer['name3'] : '';
+        $customer['name4'] = isset($customer['name4']) ? $customer['name4'] : '';
+        $customer['zipcode'] = isset($customer['zipcode']) ? $customer['zipcode'] : '1100011';
+        $customer['pref'] = isset($customer['pref']) ? $customer['pref'] : '鳥取県';
+        $customer['address1'] = isset($customer['address1']) ? $customer['address1'] : '鳥取県';
+        $customer['address2'] = isset($customer['address2']) ? $customer['address2'] : '横浜市上北町';
+        $customer['address3'] = isset($customer['address3']) ? $customer['address3'] : '9-2';
+        $customer['tel'] = isset($customer['tel']) ? $customer['tel'] : '08011111111';
+        $customer['fax'] = isset($customer['fax']) ? $customer['fax'] : '';
+
+        if (empty($entry['delivery'])) {
+            $entry['delivery'] = 
+        } else {
+            $entry['delivery']['delivery_flag'] = '1';
+        }
+
+        $status = apply_filters('usces_filter_reg_orderdata_status', $status, $entry);
+        $order_date = (isset($results['order_date'])) ? $results['order_date'] : $gmtdate;
+        $delidue_date = (isset($entry['order']['delidue_date'])) ? $entry['order']['delidue_date'] : null;
         $order_table_name = $wpdb->prefix . 'usces_order';
+        $query = $wpdb->prepare(
+            "INSERT INTO {$order_table_name} (
+                `mem_id`, `order_email`, `order_name1`, `order_name2`, `order_name3`, `order_name4`, 
+                `order_zip`, `order_pref`, `order_address1`, `order_address2`, `order_address3`, 
+                `order_tel`, `order_fax`, `order_delivery`, `order_cart`, `order_note`, `order_delivery_method`, `order_delivery_date`, `order_delivery_time`, 
+                `order_payment_name`, `order_condition`, `order_item_total_price`, `order_getpoint`, `order_usedpoint`, `order_discount`, 
+                `order_shipping_charge`, `order_cod_fee`, `order_tax`, `order_date`, `order_modified`, `order_status`, `order_delidue_date` ) 
+            VALUES (%d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s, %s, %f, %d, %d, %f, %f, %f, %f, %s, %s, %s, %s)",
+            (int)$member['ID'],
+            isset($customer['mailaddress1']) ? $customer['mailaddress1'] : 'test@gmail.com',
+            isset($customer['name1']) ? $customer['name1'] : 'Mega',
+            isset($customer['name2']) ? $customer['name2'] : 'Man',
+            isset($customer['name3']) ? $customer['name3'] : '',
+            isset($customer['name4']) ? $customer['name4'] : '',
+            isset($customer['zipcode']) ? $customer['zipcode'] : '1100011',
+            isset($customer['pref']) ? $customer['pref'] : '鳥取県',
+            isset($customer['address1']) ? $customer['address1'] : '鳥取県',
+            isset($customer['address2']) ? $customer['address2'] : '横浜市上北町',
+            isset($customer['address3']) ? $customer['address3'] : '9-2',
+            isset($customer['tel']) ? $customer['tel'] : '08011111111',
+            isset($customer['fax']) ? $customer['fax'] : '',
+            isset($entry['order_delivery']) ? $entry['order_delivery'] : 'a:21:{s:5:"name1";s:4:"Test";s:5:"name2";s:3:"Man";s:5:"name3";s:0:"";s:5:"name4";s:0:"";s:7:"zipcode";s:7:"1100011";s:8:"address1";s:18:"横浜市上北町";s:8:"address2";s:3:"9-2";s:8:"address3";s:0:"";s:3:"tel";s:11:"08011111111";s:3:"fax";s:0:"";s:7:"country";s:2:"JP";s:4:"pref";s:9:"鳥取県";s:13:"delivery_flag";s:1:"0";s:2:"ID";s:4:"1001";s:12:"mailaddress1";s:24:"test@gmail.com";s:12:"mailaddress2";s:24:"test@gmail.com";s:5:"point";s:1:"0";s:8:"delivery";s:0:"";s:10:"registered";s:19:"2020-03-16 02:51:38";s:8:"nicename";s:0:"";s:6:"status";s:1:"0";}',
+            serialize($cart),
+            isset($entry['order_note']) ? $entry['order_note'] : '',
+            isset($entry['order_delivery_method']) ? $entry['order_delivery_method'] : '1',
+            isset($entry['order_delivery_date']) ? $entry['order_delivery_date'] : '指定しない',
+            isset($entry['order_delivery_time']) ? $entry['order_delivery_time'] : '指定しない',
+            isset($entry['order_payment_name']) ? $entry['order_payment_name'] : 'COD',
+            isset($entry['order_condition']) ? $entry['order_condition'] : 'a:15:{s:12:"display_mode";s:9:"Usualsale";s:18:"campaign_privilege";s:0:"";s:17:"campaign_category";i:0;s:15:"privilege_point";s:0:"";s:18:"privilege_discount";s:0:"";s:11:"tax_display";s:8:"activate";s:8:"tax_mode";s:7:"include";s:10:"tax_target";s:3:"all";s:8:"tax_rate";s:0:"";s:10:"tax_method";s:7:"cutting";s:18:"applicable_taxrate";s:8:"standard";s:16:"tax_rate_reduced";s:0:"";s:18:"membersystem_state";s:8:"activate";s:18:"membersystem_point";s:8:"activate";s:14:"point_coverage";i:0;}',
+            isset($entry['order_item_total_price']) ? $entry['order_item_total_price'] : '0.00',
+            isset($entry['order_getpoint']) ? $entry['order_getpoint'] : '0',
+            isset($entry['order_usedpoint']) ? $entry['order_usedpoint'] : '0',
+            isset($entry['order_discount']) ? $entry['order_discount'] : '0.00',
+            isset($entry['order_shipping_charge']) ? $entry['order_shipping_charge'] : '0.00',
+            isset($entry['order_cod_fee']) ? $entry['order_cod_fee'] : '0.00',
+            isset($entry['order_tax']) ? $entry['order_tax'] : '0.00',
+            isset($entry['order_date']) ? $entry['order_date'] : '0000-00-00 00:00:00',
+            isset($entry['order_modified']) ? $entry['order_modified'] : '',
+            isset($entry['order_status']) ? $entry['order_status'] : '',
+            isset($entry['order_delidue_date']) ? $entry['order_delidue_date'] : '指定しない'
+        );
+        $res = $wpdb->query($query);
+        if ($res === false) {
+            throw new RuntimeException($wpdb->last_error, self::WPDB_ERROR);
+        }
+        $order_id = $wpdb->insert_id;
+
         $index = 0;
-        foreach ($orders as $order) {
+        $cart_table = $wpdb->prefix . 'usces_ordercart';
+        $cart_meta_table = $wpdb->prefix . 'usces_ordercart_meta';
+        foreach ($cart as $row_index => $value) {
+            $item_code = get_post_meta($value['post_id'], '_itemCode', true);
+            $item_name = get_post_meta($value['post_id'], '_itemName', true);
+            $skus = $usces->get_skus($value['post_id'], 'code');
+            $sku_encoded = $value['sku'];
+            $skucode = urldecode($value['sku']);
+            $sku = $skus[$skucode];
+            $tax = 0;
             $query = $wpdb->prepare(
-                "INSERT INTO {$order_table_name} (
-                    `mem_id`, `order_email`, `order_name1`, `order_name2`, `order_name3`, `order_name4`, 
-                    `order_zip`, `order_pref`, `order_address1`, `order_address2`, `order_address3`, 
-                    `order_tel`, `order_fax`, `order_delivery`, `order_cart`, `order_note`, `order_delivery_method`, `order_delivery_date`, `order_delivery_time`, 
-                    `order_payment_name`, `order_condition`, `order_item_total_price`, `order_getpoint`, `order_usedpoint`, `order_discount`, 
-                    `order_shipping_charge`, `order_cod_fee`, `order_tax`, `order_date`, `order_modified`, `order_status`, `order_delidue_date`
-                ) 
-                VALUES (%d, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %d, %s, %s, %s, %s, %f, %d, %d, %f, %f, %f, %f, %s, %s, %s, %s)",
-                isset($order['mem_id']) ? $order['mem_id'] : 0,
-                isset($order['order_email']) ? $order['order_email'] : "test{$index}@gmail.com",
-                isset($order['order_name1']) ? $order['order_name1'] : "Mega{$index}",
-                isset($order['order_name2']) ? $order['order_name2'] : "Man{$index}",
-                isset($order['order_name3']) ? $order['order_name3'] : '',
-                isset($order['order_name4']) ? $order['order_name4'] : '',
-                isset($order['order_zip']) ? $order['order_zip'] : '1100011',
-                isset($order['order_pref']) ? $order['order_pref'] : '鳥取県',
-                isset($order['order_address1']) ? $order['order_address1'] : '鳥取県',
-                isset($order['order_address2']) ? $order['order_address2'] : '横浜市上北町',
-                isset($order['order_address3']) ? $order['order_address3'] : '9-2',
-                isset($order['order_tel']) ? $order['order_tel'] : '08011111111',
-                isset($order['order_fax']) ? $order['order_fax'] : '',
-                isset($order['order_delivery']) ? $order['order_delivery'] : 'a:21:{s:5:"name1";s:4:"Test";s:5:"name2";s:3:"Man";s:5:"name3";s:0:"";s:5:"name4";s:0:"";s:7:"zipcode";s:7:"1100011";s:8:"address1";s:18:"横浜市上北町";s:8:"address2";s:3:"9-2";s:8:"address3";s:0:"";s:3:"tel";s:11:"08011111111";s:3:"fax";s:0:"";s:7:"country";s:2:"JP";s:4:"pref";s:9:"鳥取県";s:13:"delivery_flag";s:1:"0";s:2:"ID";s:4:"1001";s:12:"mailaddress1";s:24:"test@gmail.com";s:12:"mailaddress2";s:24:"test@gmail.com";s:5:"point";s:1:"0";s:8:"delivery";s:0:"";s:10:"registered";s:19:"2020-03-16 02:51:38";s:8:"nicename";s:0:"";s:6:"status";s:1:"0";}',
-                isset($order['order_cart']) ? $order['order_cart'] : 'a:1:{i:0;a:7:{s:6:"serial";s:37:"a:1:{i:37;a:1:{s:9:"code1%3A1";i:0;}}";s:7:"post_id";i:37;s:3:"sku";s:9:"code1%3A1";s:7:"options";a:0:{}s:5:"price";s:4:"7000";s:8:"quantity";i:1;s:7:"advance";s:0:"";}}',
-                isset($order['order_note']) ? $order['order_note'] : '',
-                isset($order['order_delivery_method']) ? $order['order_delivery_method'] : '1',
-                isset($order['order_delivery_date']) ? $order['order_delivery_date'] : '指定しない',
-                isset($order['order_delivery_time']) ? $order['order_delivery_time'] : '指定しない',
-                isset($order['order_payment_name']) ? $order['order_payment_name'] : 'COD',
-                isset($order['order_condition']) ? $order['order_condition'] : 'a:15:{s:12:"display_mode";s:9:"Usualsale";s:18:"campaign_privilege";s:0:"";s:17:"campaign_category";i:0;s:15:"privilege_point";s:0:"";s:18:"privilege_discount";s:0:"";s:11:"tax_display";s:8:"activate";s:8:"tax_mode";s:7:"include";s:10:"tax_target";s:3:"all";s:8:"tax_rate";s:0:"";s:10:"tax_method";s:7:"cutting";s:18:"applicable_taxrate";s:8:"standard";s:16:"tax_rate_reduced";s:0:"";s:18:"membersystem_state";s:8:"activate";s:18:"membersystem_point";s:8:"activate";s:14:"point_coverage";i:0;}',
-                isset($order['order_item_total_price']) ? $order['order_item_total_price'] : '0.00',
-                isset($order['order_getpoint']) ? $order['order_getpoint'] : '0',
-                isset($order['order_usedpoint']) ? $order['order_usedpoint'] : '0',
-                isset($order['order_discount']) ? $order['order_discount'] : '0.00',
-                isset($order['order_shipping_charge']) ? $order['order_shipping_charge'] : '0.00',
-                isset($order['order_cod_fee']) ? $order['order_cod_fee'] : '0.00',
-                isset($order['order_tax']) ? $order['order_tax'] : '0.00',
-                isset($order['order_date']) ? $order['order_date'] : '0000-00-00 00:00:00',
-                isset($order['order_modified']) ? $order['order_modified'] : '',
-                isset($order['order_status']) ? $order['order_status'] : '',
-                isset($order['order_delidue_date']) ? $order['order_delidue_date'] : '指定しない'
+                "INSERT INTO $cart_table 
+                (
+                order_id, row_index, post_id, item_code, item_name, 
+                sku_code, sku_name, cprice, price, quantity, 
+                unit, tax, destination_id, cart_serial 
+                ) VALUES (
+                %d, %d, %d, %s, %s, 
+                %s, %s, %f, %f, %f, 
+                %s, %d, %d, %s 
+                )",
+                $order_id,
+                $row_index,
+                $value['post_id'],
+                $item_code,
+                $item_name,
+                $skucode,
+                $sku['name'],
+                $sku['cprice'],
+                $value['price'],
+                $value['quantity'],
+                $sku['unit'],
+                $tax,
+                null,
+                $value['serial']
             );
+            $res = $wpdb->query($query);
+            if ($res === false) {
+                throw new RuntimeException($wpdb->last_error, self::WPDB_ERROR);
+            }
+
+            $cart_id = $wpdb->insert_id;
 
             $index++;
-            $wpdb->query($query);
         }
+    }
+
+    public function createOrder() {
     }
 
     /**
      * Creates a Welcart item
      *
      * @author Evan D Shaw <evandanielshaw@gmail.com>
+     * @global \usc_e_shop $usces
+     * @global \WP_User|null $current_user
+     * @global \wpdb $wpdb
      * @param string $itemcode
      * @param array  $itemskus multi-dimensional array of SKUs for the item. Must contain at least one SKU
      * @param array  $itemargs extra arguments to add to `$_POST` for the `item_save_metadata()` Welcart function
-     * @return int
+     * @return int Post ID of new item
      * @throws InvalidArgumentException Thrown if required arguments are missing.
      * @throws Exception Thrown if an error is returned by a Welcart function.
      */
