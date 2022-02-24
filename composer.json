@@ -12,6 +12,7 @@
   "autoload": {
     "psr-4": {
       "Codeception\\Module\\": "src/Module",
+      "Page\\": "src/Page",
       "Aivec\\Welcart\\CodeceptModule\\": "src/lib"
     },
     "files": [
@@ -36,5 +37,10 @@
     "test:all": [
       "composer test:wpunit"
     ]
+  },
+  "config": {
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
   }
 }
