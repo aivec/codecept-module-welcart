@@ -1,0 +1,45 @@
+# Codeception Test Suite Configuration
+#
+# Suite for acceptance tests with Selenium.
+# Perform tests in browser using the WPWebDriver, powered by Selenium via selenoid.
+#
+# This suite maps localhost in the browser to TEST_SITE_WP_URL. This is useful
+# when testing a service that requires the sandbox environment to be run from localhost.
+#
+# If a localhost URL isn't required, use the selenium-bridge suite instead
+
+actor: SeleniumTester
+modules:
+    enabled:
+        - WPDb
+        - WPWebDriver
+        - Asserts
+        - SelenoidVideoRecorder
+    config:
+        WPDb:
+            dsn: 'mysql:host=%TEST_SITE_DB_HOST%;dbname=%TEST_SITE_DB_NAME%'
+            user: '%TEST_SITE_DB_USER%'
+            password: '%TEST_SITE_DB_PASSWORD%'
+            dump: 'tests/_data/dump.sql' # replace this with the path to your dump file
+            #import the dump before the tests; this means the test site database will be repopulated before the tests.
+            populate: true 
+            # re-import the dump between tests; this means the test site database will be repopulated between the tests.
+            cleanup: true 
+            waitlock: 10
+            url: http://localhost
+            urlReplacement: true #replace the hardcoded dump URL with the one above
+            tablePrefix: '%TEST_SITE_TABLE_PREFIX%'
+        WPWebDriver:
+            url: http://localhost
+            adminUsername: '%TEST_SITE_ADMIN_USERNAME%'
+            adminPassword: '%TEST_SITE_ADMIN_PASSWORD%'
+            adminPath: '%TEST_SITE_WP_ADMIN_PATH%'
+            browser: chrome
+            host: '%SELENOID_HOST%'
+            port: '%SELENOID_PORT%'
+            capabilities:
+                enableLog: true
+                enableVNC: true
+                enableVideo: true
+                chromeOptions:
+                    args: ["host-rules=MAP localhost %TEST_SITE_WP_URL_NO_SCHEME%"]

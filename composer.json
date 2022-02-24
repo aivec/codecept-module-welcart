@@ -14,21 +14,19 @@
       "Codeception\\Module\\": "src/Module",
       "Page\\": "src/Page",
       "Aivec\\Welcart\\CodeceptModule\\": "src/lib"
-    },
-    "files": [
-      "vendor/lucatume/wp-browser/src/includes/factory.php"
-    ]
+    }
   },
   "require": {
     "lucatume/wp-browser": "^3.0"
   },
   "require-dev": {
-    "aivec/codecept-docker": "^0.4.2",
+    "aivec/codecept-docker": "^0.6.9",
     "codeception/module-db": "^1.1",
     "codeception/module-phpbrowser": "^1.0",
     "codeception/module-cli": "^1.1",
     "codeception/module-asserts": "^1.3",
-    "aivec/phpcs-wp": "^2.0"
+    "aivec/phpcs-wp": "^2.0",
+    "codeception/module-webdriver": "^1.0"
   },
   "scripts": {
     "lint": "phpcs -s --standard=Aivec-Core-7 src",

@@ -192,7 +192,7 @@ class Welcart extends Module
         $customer['fax'] = isset($customer['fax']) ? $customer['fax'] : '';
 
         if (empty($entry['delivery'])) {
-            $entry['delivery'] = 
+            $entry['delivery']['delivery_flag'] = '0';
         } else {
             $entry['delivery']['delivery_flag'] = '1';
         }
