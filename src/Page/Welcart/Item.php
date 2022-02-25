@@ -25,7 +25,7 @@ class Item
 
     public function amOnPage($permalinkPath) {
         $this->I->amOnPage($permalinkPath);
-        $this->I->canSeeElement($this::$addToCartButton);
+        $this->I->seeElement($this::$addToCartButton);
     }
 
     public function addItemToCart() {

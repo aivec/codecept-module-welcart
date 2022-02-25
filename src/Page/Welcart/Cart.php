@@ -25,7 +25,7 @@ class Cart
     }
 
     public function canSeeNextButton() {
-        $this->I->canSeeElement($this::$nextbtn);
+        $this->I->seeElement($this::$nextbtn);
     }
 
     public function goToNextPage() {
